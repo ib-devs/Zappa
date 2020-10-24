@@ -454,7 +454,7 @@ For example, if you have a Flask API for ordering a pie, you can call your `bake
 
 ```python
 from flask import Flask
-from zappa.async import task
+from zappa.asynchronous import task
 app = Flask(__name__)
 
 @task
@@ -479,7 +479,7 @@ And that's it! Your API response will return immediately, while the `make_pie` f
 By default, this feature uses direct AWS Lambda invocation. You can instead use AWS Simple Notification Service as the task event source by using the `task_sns` decorator, like so:
 
 ```python
-from zappa.async import task_sns
+from zappa.asynchronous import task_sns
 @task_sns
 ```
 
@@ -505,7 +505,7 @@ Using SNS will also return a message ID in case you need to track your invocatio
 You can also use this functionality without a decorator by passing your function to `zappa.async.run`, like so:
 
 ```python
-from zappa.async import run
+from zappa.asynchronous import run
 
 run(your_function, args, kwargs) # Using Lambda
 run(your_function, args, kwargs, service='sns') # Using SNS

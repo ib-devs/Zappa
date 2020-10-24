@@ -3,7 +3,7 @@ Zappa Async Tasks
 
 Example:
 ```
-from zappa.async import task
+from zappa.asynchronous import task
 
 @task(service='sns')
 def my_async_func(*args, **kwargs):
@@ -88,7 +88,7 @@ class LambdaAsyncResponse(object):
         """
         Given a message, directly invoke the lamdba function for this task.
         """
-        message['command'] = 'zappa.async.route_lambda_task'
+        message['command'] = 'zappa.asynchronous.route_lambda_task'
         payload = json.dumps(message).encode('utf-8')
         if len(payload) > 128000: # pragma: no cover
             raise AsyncException("Payload too large for async Lambda call")
@@ -129,7 +129,7 @@ class SnsAsyncResponse(LambdaAsyncResponse):
         """
         Given a message, publish to this topic.
         """
-        message['command'] = 'zappa.async.route_sns_task'
+        message['command'] = 'zappa.asynchronous.route_sns_task'
         payload = json.dumps(message).encode('utf-8')
         if len(payload) > 256000: # pragma: no cover
             raise AsyncException("Payload too large for SNS")
@@ -185,12 +185,12 @@ def run(func, args=[], kwargs={}, service='lambda', **task_kwargs):
     Instead of decorating a function with @task, you can just run it directly.
     If you were going to do func(*args, **kwargs), then you will call this:
 
-    import zappa.async.run
-    zappa.async.run(func, args, kwargs)
+    import zappa.asynchronous.run
+    zappa.asynchronous.run(func, args, kwargs)
 
     If you want to use SNS, then do:
 
-    zappa.async.run(func, args, kwargs, service='sns')
+    zappa.asynchronous.run(func, args, kwargs, service='sns')
 
     and other arguments are similar to @task
     """

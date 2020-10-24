@@ -21,8 +21,8 @@ from click.exceptions import ClickException
 from lambda_packages import lambda_packages
 
 
-from zappa.async import AsyncException, LambdaAsyncResponse, SnsAsyncResponse
-from zappa.async import import_and_get_task, \
+from zappa.asynchronous import AsyncException, LambdaAsyncResponse, SnsAsyncResponse
+from zappa.asynchronous import import_and_get_task, \
                         get_func_task_path, \
                         route_lambda_task, \
                         route_sns_task, \
