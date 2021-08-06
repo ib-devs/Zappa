@@ -111,6 +111,7 @@ class ZappaCLI(object):
     environment_variables = None
     authorizer = None
     aws_kms_key_arn = ''
+    web_socket_handler = None
 
     cognito_authorizer_path = '/'
 
@@ -1820,6 +1821,9 @@ class ZappaCLI(object):
         self.aws_kms_key_arn = self.stage_config.get('aws_kms_key_arn', '')
         self.cognito_authorizer_path = self.stage_config.get('cognito_authorizer_path', '/')
 
+        # custom zappa settings key for web socket
+        self.web_socket_handler = self.stage_config.get('web_socket_handler')
+
         desired_role_name = self.lambda_name + "-ZappaLambdaExecutionRole"
         self.zappa = Zappa( boto_session=session,
                             profile_name=self.profile_name,
@@ -2090,6 +2094,12 @@ class ZappaCLI(object):
             if authorizer_function:
                 settings_s += "AUTHORIZER_FUNCTION='{0!s}'\n".format(authorizer_function)
 
+            # web socket function
+            if self.web_socket_handler:
+                settings_s += "WEB_SOCKET_HANDLER='{0!s}'\n".format(
+                    self.web_socket_handler)
+            else:
+                settings_s += "WEB_SOCKET_HANDLER=None\n"
 
             # Copy our Django app into root of our package.
             # It doesn't work otherwise.
