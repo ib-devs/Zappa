@@ -425,6 +425,20 @@ class LambdaHandler(object):
                 logger.error("Cannot find a function to process the authorization request.")
                 raise Exception('Unauthorized')
 
+        # this is a web socket event
+        elif event.get('requestContext') and \
+                event['requestContext'].get('routeKey'):
+            whole_function = self.settings.WEB_SOCKET_HANDLER
+            if whole_function:
+                app_function = self.import_module_and_get_function(
+                    whole_function)
+                result = self.run_function(app_function, event, context)
+                return result
+            else:
+                logger.error(
+                    "Cannot find a function to process the web socket request.")
+                raise Exception('Web socket request handler not found')
+
         # Normal web app flow
         try:
             # Timing
