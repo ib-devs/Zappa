@@ -427,7 +427,7 @@ class LambdaHandler(object):
 
         # this is a web socket event
         elif event.get('requestContext') and \
-                event['requestContext'].get('routeKey'):
+                event['requestContext'].get('connectionId'):
             whole_function = self.settings.WEB_SOCKET_HANDLER
             if whole_function:
                 app_function = self.import_module_and_get_function(
