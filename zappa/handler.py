@@ -477,6 +477,11 @@ class LambdaHandler(object):
                 # Pack the WSGI response into our special dictionary.
                 zappa_returndict = dict()
 
+                print(type(response), type(response.data))
+                print(response.mimetype)
+                print(response.data)
+                print(response.status_code)
+                print(response.headers)
                 if response.data:
                     if settings.BINARY_SUPPORT:
                         if not response.mimetype.startswith("text/") \
@@ -500,7 +505,7 @@ class LambdaHandler(object):
                 response_time_ms = delta.total_seconds() * 1000
                 response.content = response.data
                 common_log(environ, response, response_time=response_time_ms)
-
+                print(zappa_returndict)
                 return zappa_returndict
         except Exception as e:  # pragma: no cover
 
