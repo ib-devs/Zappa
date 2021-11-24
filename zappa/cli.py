@@ -844,6 +844,9 @@ class ZappaCLI(object):
         # remove old version_lambda functions
         self.zappa.remove_old_version_lambda_functions(self.lambda_name)
 
+        import time
+        time.sleep(30)
+
         # Update the configuration, in case there are changes.
         self.lambda_arn = self.zappa.update_lambda_configuration(
                                                         lambda_arn=self.lambda_arn,
