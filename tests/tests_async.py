@@ -1,25 +1,13 @@
 # -*- coding: utf8 -*-
-import base64
 import boto3
-import collections
-import json
-
-from io import BytesIO, StringIO
-import flask
 import mock
 import os
-import random
-import string
-import zipfile
-import re
 import unittest
-import shutil
-import sys
-import tempfile
 
-from click.exceptions import ClickException
-from lambda_packages import lambda_packages
-
+try:
+    from mock import patch
+except ImportError:
+    from unittest.mock import patch
 
 from zappa.asynchronous import AsyncException, LambdaAsyncResponse, SnsAsyncResponse
 from zappa.asynchronous import import_and_get_task, \
@@ -71,10 +59,44 @@ class TestZappa(unittest.TestCase):
         s = SnsAsyncResponse(arn="arn:abc:def", boto_session=boto_session)
 
     def test_nofails_funcs(self):
-        funk = import_and_get_task("tests.test_app.schedule_me")
+        funk = import_and_get_task("tests.test_app.async_me")
         get_func_task_path(funk)
-        is_from_router()
+        self.assertEqual(funk.__name__, 'async_me')
 
     ##
     # Functional tests
     ##
+    def test_sync_call(self):
+        funk = import_and_get_task("tests.test_app.async_me")
+        self.assertEqual(funk.sync('123'), "run async when on lambda 123")
+
+    def test_async_call_with_defaults(self):
+        """Change a task's asynchronousity at runtime."""
+        # Import the task first to make sure it is decorated whilst the
+        # environment is unpatched.
+        async_me = import_and_get_task("tests.test_app.async_me")
+        lambda_async_mock = mock.Mock()
+        lambda_async_mock.return_value.send.return_value = "Running async!"
+        with mock.patch.dict('zappa.asynchronous.ASYNC_CLASSES',
+                             {'lambda': lambda_async_mock}):
+            # First check that it still runs synchronously by default
+            self.assertEqual(async_me("123"),
+                             "run async when on lambda 123")
+
+            # Now patch the environment to make it look like we are running on
+            # AWS Lambda
+            options = {
+                'AWS_LAMBDA_FUNCTION_NAME': 'MyLambda',
+                'AWS_REGION': 'us-east-1'
+            }
+            with mock.patch.dict(os.environ, options):
+                self.assertEqual(async_me("qux"),
+                                 "Running async!")
+
+        # And check the dispatching class got called correctly
+        lambda_async_mock.assert_called_once()
+        lambda_async_mock.assert_called_with(aws_region='us-east-1',
+                                             capture_response=False,
+                                             lambda_function_name="MyLambda")
+        lambda_async_mock.return_value.send.assert_called_with(
+            get_func_task_path(async_me), ("qux",), {})

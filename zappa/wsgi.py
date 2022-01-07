@@ -5,7 +5,6 @@ import logging
 import six
 import sys
 
-from builtins import bytes
 from requestlogger import ApacheFormatter
 from sys import stderr
 from werkzeug import urls
@@ -16,6 +15,8 @@ if sys.version_info[0] < 3:
 else:
     from urllib.parse import urlencode
 
+from .utilities import merge_headers, titlecase_keys
+
 BINARY_METHODS = [
                     "POST",
                     "PUT",
@@ -25,20 +26,52 @@ BINARY_METHODS = [
                     "OPTIONS"
                 ]
 
+
 def create_wsgi_request(event_info,
                         server_name='zappa',
                         script_name=None,
                         trailing_slash=True,
-                        binary_support=False
+                        binary_support=False,
+                        base_path=None,
+                        context_header_mappings={},
                         ):
         """
         Given some event_info via API Gateway,
         create and return a valid WSGI request environ.
         """
         method = event_info['httpMethod']
-        params = event_info['pathParameters']
-        query = event_info['queryStringParameters'] # APIGW won't allow multiple entries, ex ?id=a&id=b
-        headers = event_info['headers'] or {} # Allow for the AGW console 'Test' button to work (Pull #735)
+        headers = merge_headers(event_info) or {} # Allow for the AGW console 'Test' button to work (Pull #735)
+
+        """
+        API Gateway and ALB both started allowing for multi-value querystring
+        params in Nov. 2018. If there aren't multi-value params present, then
+        it acts identically to 'queryStringParameters', so we can use it as a
+        drop-in replacement.
+
+        The one caveat here is that ALB will only include _one_ of
+        queryStringParameters _or_ multiValueQueryStringParameters, which means
+        we have to check for the existence of one and then fall back to the
+        other.
+        """
+        if 'multiValueQueryStringParameters' in event_info:
+            query = event_info['multiValueQueryStringParameters']
+            query_string = urlencode(query, doseq=True) if query else ''
+        else:
+            query = event_info.get('queryStringParameters', {})
+            query_string = urlencode(query) if query else ''
+
+        if context_header_mappings:
+            for key, value in context_header_mappings.items():
+                parts = value.split('.')
+                header_val = event_info['requestContext']
+                for part in parts:
+                    if part not in header_val:
+                        header_val = None
+                        break
+                    else:
+                        header_val = header_val[part]
+                if header_val is not None:
+                    headers[key] = header_val
 
         # Extract remote user from context if Authorizer is enabled
         remote_user = None
@@ -50,6 +83,7 @@ def create_wsgi_request(event_info,
         # Related:  https://github.com/Miserlou/Zappa/issues/677
         #           https://github.com/Miserlou/Zappa/issues/683
         #           https://github.com/Miserlou/Zappa/issues/696
+        #           https://github.com/Miserlou/Zappa/issues/836
         #           https://en.wikipedia.org/wiki/Hypertext_Transfer_Protocol#Summary_table
         if binary_support and (method in BINARY_METHODS):
             if event_info.get('isBase64Encoded', False):
@@ -57,24 +91,24 @@ def create_wsgi_request(event_info,
                 body = base64.b64decode(encoded_body)
             else:
                 body = event_info['body']
+                if isinstance(body, six.string_types):
+                    body = body.encode("utf-8")
+
         else:
             body = event_info['body']
-
-        if body and isinstance(body, six.string_types):
-            body = body.encode("utf-8")
+            if isinstance(body, six.string_types):
+                body = body.encode("utf-8")
 
         # Make header names canonical, e.g. content-type => Content-Type
-        for header in headers.keys():
-            canonical = header.title()
-            if canonical != header:
-                headers[canonical] = headers.pop(header)
+        # https://github.com/Miserlou/Zappa/issues/1188
+        headers = titlecase_keys(headers)
 
         path = urls.url_unquote(event_info['path'])
+        if base_path:
+            script_name = '/' + base_path
 
-        if query:
-            query_string = urlencode(query)
-        else:
-            query_string = ""
+            if path.startswith(script_name):
+                path = path[len(script_name):]
 
         x_forwarded_for = headers.get('X-Forwarded-For', '')
         if ',' in x_forwarded_for:
@@ -85,11 +119,11 @@ def create_wsgi_request(event_info,
             remote_addr = '127.0.0.1'
 
         environ = {
-            'PATH_INFO': path,
-            'QUERY_STRING': query_string,
+            'PATH_INFO': get_wsgi_string(path),
+            'QUERY_STRING': get_wsgi_string(query_string),
             'REMOTE_ADDR': remote_addr,
             'REQUEST_METHOD': method,
-            'SCRIPT_NAME': str(script_name) if script_name else '',
+            'SCRIPT_NAME': get_wsgi_string(str(script_name)) if script_name else '',
             'SERVER_NAME': str(server_name),
             'SERVER_PORT': headers.get('X-Forwarded-Port', '80'),
             'SERVER_PROTOCOL': str('HTTP/1.1'),
@@ -103,7 +137,7 @@ def create_wsgi_request(event_info,
         }
 
         # Input processing
-        if method in ["POST", "PUT", "PATCH"]:
+        if method in ["POST", "PUT", "PATCH", "DELETE"]:
             if 'Content-Type' in headers:
                 environ['CONTENT_TYPE'] = headers['Content-Type']
 
@@ -142,7 +176,6 @@ def common_log(environ, response, response_time=None):
     """
 
     logger = logging.getLogger()
-    logger.setLevel(logging.INFO)
 
     if response_time:
         formatter = ApacheFormatter(with_response_time=True)
@@ -161,3 +194,11 @@ def common_log(environ, response, response_time=None):
     # logger.info(log_entry)
 
     return log_entry
+
+
+# Related: https://github.com/Miserlou/Zappa/issues/1199
+def get_wsgi_string(string, encoding='utf-8'):
+    """
+    Returns wsgi-compatible string
+    """
+    return string.encode(encoding).decode('iso-8859-1')

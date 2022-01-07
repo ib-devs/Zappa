@@ -1,23 +1,31 @@
 import os
 import sys
 from setuptools import setup
+from io import open
+from zappa import __version__
 
-# Set external files
-try:
-    from pypandoc import convert
-    README = convert('README.md', 'rst')
-except ImportError:
-    README = open(os.path.join(os.path.dirname(__file__), 'README.md')).read()
+with open('README.md') as readme_file:
+    long_description = readme_file.read()
 
 with open(os.path.join(os.path.dirname(__file__), 'requirements.txt')) as f:
-    required = f.read().splitlines()
+    if sys.version_info[0] == 2:
+        required = f.read().splitlines()
+    else:
+        # This logic is intended to prevent the futures package from being installed in python 3 environments
+        # as it can cause unexpected syntax errors in other packages. Futures is in the standard library in python 3
+        # and is should never be installed in these environments.
+        # Related: https://github.com/Miserlou/Zappa/issues/1179
+        required = []
+        for package in f.read().splitlines():
+            if 'futures' not in package:
+                required.append(package)
 
 with open(os.path.join(os.path.dirname(__file__), 'test_requirements.txt')) as f:
     test_required = f.read().splitlines()
 
 setup(
     name='zappa',
-    version='0.41.1',
+    version=__version__,
     packages=['zappa'],
     install_requires=required,
     tests_require=test_required,
@@ -25,7 +33,8 @@ setup(
     include_package_data=True,
     license='MIT License',
     description='Server-less Python Web Services for AWS Lambda and API Gateway',
-    long_description=README,
+    long_description=long_description,
+    long_description_content_type='text/markdown',
     url='https://github.com/Miserlou/Zappa',
     author='Rich Jones',
     author_email='rich@openwatch.net',
@@ -42,6 +51,11 @@ setup(
         'Programming Language :: Python',
         'Programming Language :: Python :: 2.7',
         'Programming Language :: Python :: 3.6',
+        'Programming Language :: Python :: 3.7',
+        'Programming Language :: Python :: 3.8',
+        'Framework :: Django',
+        'Framework :: Django :: 1.11',
+        'Framework :: Django :: 2.0',
         'Topic :: Internet :: WWW/HTTP',
         'Topic :: Internet :: WWW/HTTP :: Dynamic Content',
     ],

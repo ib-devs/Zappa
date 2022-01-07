@@ -1,8 +1,11 @@
+import botocore
 import calendar
 import datetime
 import durationpy
 import fnmatch
+import io
 import json
+import logging
 import os
 import re
 import shutil
@@ -11,25 +14,30 @@ import sys
 
 from past.builtins import basestring
 
-if sys.version_info[0] < 3:
-    from urlparse import urlparse
-else:
+try:
     from urllib.parse import urlparse
+except ImportError:
+    from urlparse import urlparse
+
+LOG = logging.getLogger(__name__)
 
 ##
 # Settings / Packaging
 ##
 
-def copytree(src, dst, symlinks=False, ignore=None):
+def copytree(src, dst, metadata=True, symlinks=False, ignore=None):
     """
     This is a contributed re-implementation of 'copytree' that
     should work with the exact same behavior on multiple platforms.
 
+    When `metadata` is False, file metadata such as permissions and modification
+    times are not copied.
     """
 
     if not os.path.exists(dst):
         os.makedirs(dst)
-        shutil.copystat(src, dst)
+        if metadata:
+            shutil.copystat(src, dst)
     lst = os.listdir(src)
 
     if ignore:
@@ -44,16 +52,17 @@ def copytree(src, dst, symlinks=False, ignore=None):
             if os.path.lexists(d):
                 os.remove(d)
             os.symlink(os.readlink(s), d)
-            try:
-                st = os.lstat(s)
-                mode = stat.S_IMODE(st.st_mode)
-                os.lchmod(d, mode)
-            except:
-                pass  # lchmod not available
+            if metadata:
+                try:
+                    st = os.lstat(s)
+                    mode = stat.S_IMODE(st.st_mode)
+                    os.lchmod(d, mode)
+                except:
+                    pass  # lchmod not available
         elif os.path.isdir(s):
-            copytree(s, d, symlinks, ignore)
+            copytree(s, d, metadata, symlinks, ignore)
         else:
-            shutil.copy2(s, d)
+            shutil.copy2(s, d) if metadata else shutil.copy(s, d)
 
 def parse_s3_url(url):
     """
@@ -73,7 +82,7 @@ def human_size(num, suffix='B'):
     """
     Convert bytes length to a human-readable version
     """
-    for unit in ['', 'Ki', 'Mi', 'Gi', 'Ti', 'Pi', 'Ei', 'Zi']:
+    for unit in ('', 'Ki', 'Mi', 'Gi', 'Ti', 'Pi', 'Ei', 'Zi'):
         if abs(num) < 1024.0:
             return "{0:3.1f}{1!s}{2!s}".format(num, unit, suffix)
         num /= 1024.0
@@ -139,7 +148,7 @@ def detect_flask_apps():
 
             full = os.path.join(root, filename)
 
-            with open(full, 'r') as f:
+            with io.open(full, 'r', encoding='utf-8') as f:
                 lines = f.readlines()
                 for line in lines:
                     app = None
@@ -162,7 +171,7 @@ def detect_flask_apps():
     return matches
 
 def get_venv_from_python_version():
-    return 'python' + str(sys.version_info[0]) + '.' + str(sys.version_info[1])
+    return 'python{}.{}'.format(*sys.version_info)
 
 def get_runtime_from_python_version():
     """
@@ -170,7 +179,12 @@ def get_runtime_from_python_version():
     if sys.version_info[0] < 3:
         return 'python2.7'
     else:
-        return 'python3.6'
+        if sys.version_info[1] <= 6:
+            return 'python3.6'
+        elif sys.version_info[1] <= 7:
+            return 'python3.7'
+        else:
+            return 'python3.8'
 
 ##
 # Async Tasks
@@ -194,6 +208,7 @@ def get_event_source(event_source, lambda_arn, target_function, boto_session, dr
     """
     import kappa.function
     import kappa.restapi
+    import kappa.event_source.base
     import kappa.event_source.dynamodb_stream
     import kappa.event_source.kinesis
     import kappa.event_source.s3
@@ -211,11 +226,133 @@ def get_event_source(event_source, lambda_arn, target_function, boto_session, dr
         def __init__(self):
             return
 
+    # Mostly adapted from kappa - will probably be replaced by kappa support
+    class SqsEventSource(kappa.event_source.base.EventSource):
+
+        def __init__(self, context, config):
+            super(SqsEventSource, self).__init__(context, config)
+            self._lambda = kappa.awsclient.create_client(
+                'lambda', context.session)
+
+        def _get_uuid(self, function):
+            uuid = None
+            response = self._lambda.call(
+                'list_event_source_mappings',
+                FunctionName=function.name,
+                EventSourceArn=self.arn)
+            LOG.debug(response)
+            if len(response['EventSourceMappings']) > 0:
+                uuid = response['EventSourceMappings'][0]['UUID']
+            return uuid
+
+        def add(self, function):
+            try:
+                response = self._lambda.call(
+                    'create_event_source_mapping',
+                    FunctionName=function.name,
+                    EventSourceArn=self.arn,
+                    BatchSize=self.batch_size,
+                    Enabled=self.enabled
+                    )
+                LOG.debug(response)
+            except Exception:
+                LOG.exception('Unable to add event source')
+
+        def enable(self, function):
+            self._config['enabled'] = True
+            try:
+                response = self._lambda.call(
+                    'update_event_source_mapping',
+                    UUID=self._get_uuid(function),
+                    Enabled=self.enabled
+                    )
+                LOG.debug(response)
+            except Exception:
+                LOG.exception('Unable to enable event source')
+
+        def disable(self, function):
+            self._config['enabled'] = False
+            try:
+                response = self._lambda.call(
+                    'update_event_source_mapping',
+                    FunctionName=function.name,
+                    Enabled=self.enabled
+                    )
+                LOG.debug(response)
+            except Exception:
+                LOG.exception('Unable to disable event source')
+
+        def update(self, function):
+            response = None
+            uuid = self._get_uuid(function)
+            if uuid:
+                try:
+                    response = self._lambda.call(
+                        'update_event_source_mapping',
+                        BatchSize=self.batch_size,
+                        Enabled=self.enabled,
+                        FunctionName=function.arn)
+                    LOG.debug(response)
+                except Exception:
+                    LOG.exception('Unable to update event source')
+
+        def remove(self, function):
+            response = None
+            uuid = self._get_uuid(function)
+            if uuid:
+                response = self._lambda.call(
+                    'delete_event_source_mapping',
+                    UUID=uuid)
+                LOG.debug(response)
+            return response
+
+        def status(self, function):
+            response = None
+            LOG.debug('getting status for event source %s', self.arn)
+            uuid = self._get_uuid(function)
+            if uuid:
+                try:
+                    response = self._lambda.call(
+                        'get_event_source_mapping',
+                        UUID=self._get_uuid(function))
+                    LOG.debug(response)
+                except botocore.exceptions.ClientError:
+                    LOG.debug('event source %s does not exist', self.arn)
+                    response = None
+            else:
+                LOG.debug('No UUID for event source %s', self.arn)
+            return response
+
+    class ExtendedSnsEventSource(kappa.event_source.sns.SNSEventSource):
+        @property
+        def filters(self):
+            return self._config.get('filters')
+
+        def add_filters(self, function):
+            try:
+                subscription = self.exists(function)
+                if subscription:
+                    response = self._sns.call(
+                        'set_subscription_attributes',
+                        SubscriptionArn=subscription['SubscriptionArn'],
+                        AttributeName='FilterPolicy',
+                        AttributeValue=json.dumps(self.filters)
+                    )
+                    kappa.event_source.sns.LOG.debug(response)
+            except Exception:
+                kappa.event_source.sns.LOG.exception('Unable to add filters for SNS topic %s', self.arn)
+
+        def add(self, function):
+            super(ExtendedSnsEventSource, self).add(function)
+            if self.filters:
+                self.add_filters(function)
+
     event_source_map = {
         'dynamodb': kappa.event_source.dynamodb_stream.DynamoDBStreamEventSource,
         'kinesis': kappa.event_source.kinesis.KinesisEventSource,
         's3': kappa.event_source.s3.S3EventSource,
-        'sns': kappa.event_source.sns.SNSEventSource,
+        'sns': ExtendedSnsEventSource,
+        'sqs': SqsEventSource,
         'events': kappa.event_source.cloudwatch.CloudWatchEventSource
     }
 
@@ -271,10 +408,7 @@ def add_event_source(event_source, lambda_arn, target_function, boto_session, dr
     if not dry:
         if not event_source_obj.status(funk):
             event_source_obj.add(funk)
-            if event_source_obj.status(funk):
-                return 'successful'
-            else:
-                return 'failed'
+            return 'successful' if event_source_obj.status(funk) else 'failed'
         else:
             return 'exists'
 
@@ -316,14 +450,11 @@ def check_new_version_available(this_version):
     """
     import requests
 
-    pypi_url = 'https://pypi.python.org/pypi/Zappa/json'
+    pypi_url = 'https://pypi.org/pypi/Zappa/json'
     resp = requests.get(pypi_url, timeout=1.5)
     top_version = resp.json()['info']['version']
 
-    if this_version != top_version:
-        return True
-    else:
-        return False
+    return this_version != top_version
 
 
 class InvalidAwsLambdaName(Exception):
@@ -361,8 +492,88 @@ def validate_name(name, maxlen=80):
     return name
 
 
-def contains_python_files_or_subdirs(dirs, files):
+def contains_python_files_or_subdirs(folder):
     """
-    checks if len of dirs greater 0 or if there are any files ending on .py or .pyc in files
+    Checks (recursively) if the directory contains .py or .pyc files
     """
-    return len(dirs) > 0 or len([filename for filename in files if filename.endswith('.py') or filename.endswith('.pyc')]) > 0
+    for root, dirs, files in os.walk(folder):
+        if [filename for filename in files if filename.endswith('.py') or filename.endswith('.pyc')]:
+            return True
+
+        for d in dirs:
+            for _, subdirs, subfiles in os.walk(d):
+                if [filename for filename in subfiles if filename.endswith('.py') or filename.endswith('.pyc')]:
+                    return True
+
+    return False
+
+
+def conflicts_with_a_neighbouring_module(directory_path):
+    """
+    Checks if a directory lies in the same directory as a .py file with the same name.
+    """
+    parent_dir_path, current_dir_name = os.path.split(os.path.normpath(directory_path))
+    neighbours = os.listdir(parent_dir_path)
+    conflicting_neighbour_filename = current_dir_name+'.py'
+    return conflicting_neighbour_filename in neighbours
+
+
+# https://github.com/Miserlou/Zappa/issues/1188
+def titlecase_keys(d):
+    """
+    Takes a dict with keys of type str and returns a new dict with all keys titlecased.
+    """
+    return {k.title(): v for k, v in d.items()}
+
+
+# https://github.com/Miserlou/Zappa/issues/1688
+def is_valid_bucket_name(name):
+    """
+    Checks if an S3 bucket name is valid according to https://docs.aws.amazon.com/AmazonS3/latest/dev/BucketRestrictions.html#bucketnamingrules
+    """
+    # Bucket names must be at least 3 and no more than 63 characters long.
+    if (len(name) < 3 or len(name) > 63):
+        return False
+    # Bucket names must not contain uppercase characters or underscores.
+    if (any(x.isupper() for x in name)):
+        return False
+    if "_" in name:
+        return False
+    # Bucket names must start with a lowercase letter or number.
+    if not (name[0].islower() or name[0].isdigit()):
+        return False
+    # Bucket names must be a series of one or more labels. Adjacent labels are separated by a single period (.).
+    for label in name.split("."):
+        # Each label must start and end with a lowercase letter or a number.
+        if len(label) < 1:
+            return False
+        if not (label[0].islower() or label[0].isdigit()):
+            return False
+        if not (label[-1].islower() or label[-1].isdigit()):
+            return False
+    # Bucket names must not be formatted as an IP address (for example, 192.168.5.4).
+    looks_like_IP = True
+    for label in name.split("."):
+        if not label.isdigit():
+            looks_like_IP = False
+            break
+    if looks_like_IP:
+        return False
+
+    return True
+
+
+def merge_headers(event):
+    """
+    Merge the values of headers and multiValueHeaders into a single dict.
+    Opens up support for multivalue headers via API Gateway and ALB.
+    See: https://github.com/Miserlou/Zappa/pull/1756
+    """
+    headers = event.get('headers') or {}
+    multi_headers = (event.get('multiValueHeaders') or {}).copy()
+    for h in set(headers.keys()):
+        if h not in multi_headers:
+            multi_headers[h] = [headers[h]]
+    for h in multi_headers.keys():
+        multi_headers[h] = ', '.join(multi_headers[h])
+    return multi_headers
