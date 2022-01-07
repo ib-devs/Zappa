@@ -1257,6 +1257,9 @@ class Zappa(object):
             "Timeout": timeout,
             "MemorySize": memory_size,
             "VpcConfig": vpc_config,
+            "TracingConfig": {
+                'Mode': 'Active' if self.xray_tracing else 'PassThrough'
+            }
         }
 
         if "Environment" in previous_config_response:
