@@ -41,6 +41,7 @@ pip-delete-this-directory.txt
 htmlcov/
 .tox/
 .coverage
+.coveragerc
 .coverage.*
 .cache
 nosetests.xml
@@ -76,5 +77,15 @@ target/
 *.swo
 tests/zappa_settings.json
 tests/example_template_outputs
+
+# Locally generated settings file
+zappa_settings.json
+
+# Sublime Text stuff
+*.sublime-project
+*.sublime-workspace
+
+README.test.md
+.vscode
 
 .venv/

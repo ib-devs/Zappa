@@ -1,7 +1,7 @@
 <!--- Provide a general summary of the issue in the Title above -->
 ## Context
 <!--- Provide a more detailed introduction to the issue itself, and why you consider it to be a bug -->
-<!--- Also, please make sure that you are running Zappa _from a virtual environment_ and are using Python 2.7 --> 
+<!--- Also, please make sure that you are running Zappa _from a virtual environment_ and are using Python 2.7/3.6 -->
 
 ## Expected Behavior
 <!--- Tell us what should happen -->
@@ -23,5 +23,6 @@
 <!--- Include as many relevant details about the environment you experienced the bug in -->
 * Zappa version used:
 * Operating System and Python version:
+* The output of `pip freeze`:
 * Link to your project (optional):
 * Your `zappa_settings.py`: 
