@@ -1017,6 +1017,11 @@ class ZappaCLI(object):
                 print("Events must be supplied as a list.")
                 return
 
+        events = [
+            event for event in events
+            if event.get("should_schedule", True)
+        ]
+
         for event in events:
             self.collision_warning(event.get('function'))
 
