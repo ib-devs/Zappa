@@ -317,7 +317,7 @@ class LambdaHandler(object):
         """
         Get the associated function to execute for a triggered AWS event
 
-        Support S3, SNS, DynamoDB and kinesis events
+        Support S3, SNS, DynamoDB, kinesis and Event bridge events
         """
         if 's3' in record:
             return record['s3']['configurationId'].split(':')[-1]
@@ -327,6 +327,16 @@ class LambdaHandler(object):
             arn = record['Sns'].get('TopicArn')
         elif 'dynamodb' in record or 'kinesis' in record:
             arn = record.get('eventSourceARN')
+        elif 'eventSource' in record and \
+                record.get('eventSource') == 'aws:sqs':
+            try:
+                body = json.loads(record.get("body"))
+            except:
+                body = {}
+
+            is_event_bridge_record = "detail-type" in body and "source" in body
+            if is_event_bridge_record:
+                return self.settings.EVENT_BRIDGE_HANDLER
 
         if arn:
             return self.settings.AWS_EVENT_MAPPING.get(arn)
