@@ -113,6 +113,7 @@ class ZappaCLI(object):
     aws_kms_key_arn = ''
     web_socket_handler = None
     event_bridge_handler = None
+    sqs_handler = None
 
     cognito_authorizer_path = '/'
 
@@ -1828,6 +1829,7 @@ class ZappaCLI(object):
         # custom zappa settings key for aws event bride
         self.event_bridge_handler = \
             self.stage_config.get("event_bridge_handler")
+        self.sqs_handler = self.stage_config.get("sqs_handler")
 
         desired_role_name = self.lambda_name + "-ZappaLambdaExecutionRole"
         self.zappa = Zappa( boto_session=session,
@@ -2112,6 +2114,13 @@ class ZappaCLI(object):
                     self.event_bridge_handler)
             else:
                 settings_s += "EVENT_BRIDGE_HANDLER=None\n"
+
+            # sqs function
+            if self.sqs_handler:
+                settings_s += "SQS_HANDLER='{0!s}'\n".format(
+                    self.sqs_handler)
+            else:
+                settings_s += "SQS_HANDLER=None\n"
 
             # Copy our Django app into root of our package.
             # It doesn't work otherwise.
