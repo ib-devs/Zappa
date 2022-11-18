@@ -117,6 +117,7 @@ class ZappaCLI(object):
     xray_tracing = False
     aws_kms_key_arn = ''
     context_header_mappings = None
+    event_bridge_handler = None
     tags = []
 
     cognito_authorizer_path = '/'
@@ -2128,6 +2129,10 @@ class ZappaCLI(object):
         # Additional tags
         self.tags = self.stage_config.get('tags', {})
 
+        # custom zappa settings key for aws event bride
+        self.event_bridge_handler = \
+            self.stage_config.get("event_bridge_handler")
+
         desired_role_name = self.lambda_name + "-ZappaLambdaExecutionRole"
         self.zappa = Zappa( boto_session=session,
                             profile_name=self.profile_name,
@@ -2447,6 +2452,13 @@ class ZappaCLI(object):
             authorizer_function = self.authorizer.get('function', None)
             if authorizer_function:
                 settings_s += "AUTHORIZER_FUNCTION='{0!s}'\n".format(authorizer_function)
+
+            # event bridge function
+            if self.event_bridge_handler:
+                settings_s += "EVENT_BRIDGE_HANDLER='{0!s}'\n".format(
+                    self.event_bridge_handler)
+            else:
+                settings_s += "EVENT_BRIDGE_HANDLER=None\n"
 
             # Copy our Django app into root of our package.
             # It doesn't work otherwise.

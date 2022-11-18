@@ -315,7 +315,16 @@ class LambdaHandler(object):
         elif 'dynamodb' in record or 'kinesis' in record:
             arn = record.get('eventSourceARN')
         elif 'eventSource' in record and record.get('eventSource') == 'aws:sqs':
-            arn = record.get('eventSourceARN')
+            try:
+                body = json.loads(record.get("body"))
+            except:
+                body = {}
+
+            is_event_bridge_record = "detail-type" in body and "source" in body
+            if is_event_bridge_record:
+                return self.settings.EVENT_BRIDGE_HANDLER
+            else:
+                arn = record.get('eventSourceARN')
         elif 's3' in record:
             arn = record['s3']['bucket']['arn']
 
