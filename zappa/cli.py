@@ -2101,6 +2101,12 @@ class ZappaCLI(object):
             else:
                 settings_s += "WEB_SOCKET_HANDLER=None\n"
 
+            # sns function
+            if self.sns_handler:
+                settings_s += "SNS_HANDLER='{0!s}'\n".format(self.sns_handler)
+            else:
+                settings_s += "SNS_HANDLER=None\n"
+
             # Copy our Django app into root of our package.
             # It doesn't work otherwise.
             if self.django_settings:
