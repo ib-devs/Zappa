@@ -112,6 +112,7 @@ class ZappaCLI(object):
     authorizer = None
     aws_kms_key_arn = ''
     web_socket_handler = None
+    sns_handler = None
 
     cognito_authorizer_path = '/'
 
