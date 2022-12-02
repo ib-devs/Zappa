@@ -1823,7 +1823,7 @@ class ZappaCLI(object):
 
         # custom zappa settings key for web socket
         self.web_socket_handler = self.stage_config.get('web_socket_handler')
-        self.self.sns_handler = self.stage_config.get('sns_handler')
+        self.sns_handler = self.stage_config.get('sns_handler')
 
         desired_role_name = self.lambda_name + "-ZappaLambdaExecutionRole"
         self.zappa = Zappa( boto_session=session,
