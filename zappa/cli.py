@@ -112,6 +112,7 @@ class ZappaCLI(object):
     authorizer = None
     aws_kms_key_arn = ''
     web_socket_handler = None
+    sns_handler = None
 
     cognito_authorizer_path = '/'
 
@@ -1823,6 +1824,7 @@ class ZappaCLI(object):
 
         # custom zappa settings key for web socket
         self.web_socket_handler = self.stage_config.get('web_socket_handler')
+        self.sns_handler = self.stage_config.get('sns_handler')
 
         desired_role_name = self.lambda_name + "-ZappaLambdaExecutionRole"
         self.zappa = Zappa( boto_session=session,
@@ -2100,6 +2102,12 @@ class ZappaCLI(object):
                     self.web_socket_handler)
             else:
                 settings_s += "WEB_SOCKET_HANDLER=None\n"
+
+            # sns function
+            if self.sns_handler:
+                settings_s += "SNS_HANDLER='{0!s}'\n".format(self.sns_handler)
+            else:
+                settings_s += "SNS_HANDLER=None\n"
 
             # Copy our Django app into root of our package.
             # It doesn't work otherwise.

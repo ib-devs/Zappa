@@ -324,7 +324,7 @@ class LambdaHandler(object):
 
         arn = None
         if 'Sns' in record:
-            arn = record['Sns'].get('TopicArn')
+            return self.settings.SNS_HANDLER
         elif 'dynamodb' in record or 'kinesis' in record:
             arn = record.get('eventSourceARN')
 
