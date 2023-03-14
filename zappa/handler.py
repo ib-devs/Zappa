@@ -167,6 +167,8 @@ class LambdaHandler(object):
 
             self.wsgi_app = ZappaWSGIMiddleware(wsgi_app_function)
             print("Instancing is done")
+        else:
+            print('cached Instancing')
 
     def load_remote_project_zip(self, project_zip_path):
         """
@@ -264,7 +266,7 @@ class LambdaHandler(object):
         a = time.time()
         handler = cls()
         b = time.time()
-        print('Instancing... time diff - {}'.format(str(b-a)))
+        print('Instancing... time diff - {}'.format(round(b-a, 2)))
         exception_handler = handler.settings.EXCEPTION_HANDLER
         a = time.time()
         try:
@@ -288,7 +290,7 @@ class LambdaHandler(object):
                 # an event execution in case of failure.
                 raise
         b = time.time()
-        print('Execution.. time diff - {}'.format(str(b-a)))
+        print('Execution.. time diff - {}'.format(round(b-a, 2)))
 
     @classmethod
     def _process_exception(cls, exception_handler, event, context, exception):
