@@ -166,6 +166,7 @@ class LambdaHandler(object):
                 self.trailing_slash = True
 
             self.wsgi_app = ZappaWSGIMiddleware(wsgi_app_function)
+            print("Instancing is done")
 
     def load_remote_project_zip(self, project_zip_path):
         """
@@ -259,8 +260,13 @@ class LambdaHandler(object):
 
     @classmethod
     def lambda_handler(cls, event, context):  # pragma: no cover
+        import time
+        a = time.time()
         handler = cls()
+        b = time.time()
+        print('Instancing... time diff - {}'.format(str(b-a)))
         exception_handler = handler.settings.EXCEPTION_HANDLER
+        a = time.time()
         try:
             return handler.handler(event, context)
         except WSGIException as wsgi_ex:
@@ -281,6 +287,8 @@ class LambdaHandler(object):
                 # Only re-raise exception if handler directed so. Allows handler to control if lambda has to retry
                 # an event execution in case of failure.
                 raise
+        b = time.time()
+        print('Execution.. time diff - {}'.format(str(b-a)))
 
     @classmethod
     def _process_exception(cls, exception_handler, event, context, exception):
