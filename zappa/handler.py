@@ -81,8 +81,9 @@ class LambdaHandler(object):
         return LambdaHandler.__instance
 
     def __init__(self, settings_name="zappa_settings", session=None):
-
+        import time
         # We haven't cached our settings yet, load the settings and app.
+        a = time.time()
         if not self.settings:
             # Loading settings from a python module
             self.settings = importlib.import_module(settings_name)
@@ -99,7 +100,8 @@ class LambdaHandler(object):
 
             if remote_bucket and remote_file:
                 self.load_remote_settings(remote_bucket, remote_file)
-
+            b = time.time()
+            b_diff = b-a
             # Let the system know that this will be a Lambda/Zappa/Stack
             os.environ["SERVERTYPE"] = "AWS Lambda"
             os.environ["FRAMEWORK"] = "Zappa"
@@ -139,7 +141,10 @@ class LambdaHandler(object):
                             print ("Failed to find library...right filename?")
                 except ImportError:
                     print ("Failed to import cytpes library")
+            c = time.time()
+            c_diff = c-b
 
+            d_diff=e_diff=f_diff=f=0
             # This is a non-WSGI application
             # https://github.com/Miserlou/Zappa/pull/748
             if not hasattr(self.settings, 'APP_MODULE') and not self.settings.DJANGO_SETTINGS:
@@ -155,17 +160,31 @@ class LambdaHandler(object):
                 self.trailing_slash = False
             # Django gets special treatment.
             else:
-
+                d = time.time()
+                d_diff = d-c
                 try:  # Support both for tests
                     from zappa.ext.django import get_django_wsgi
                 except ImportError:  # pragma: no cover
                     from django_zappa_app import get_django_wsgi
 
                 # Get the Django WSGI app from our extension
+                e = time.time()
+                e_diff = e-d
                 wsgi_app_function = get_django_wsgi(self.settings.DJANGO_SETTINGS)
                 self.trailing_slash = True
 
+                f = time.time()
+                f_diff = f-e
+
             self.wsgi_app = ZappaWSGIMiddleware(wsgi_app_function)
+            g = time.time()
+            g_diff = g-f
+
+            print(
+                "Instancing times: {}, {}, {}, {}, {}".format(
+                    round(b_diff, 4), round(c_diff, 4), round(d_diff, 4),
+                    round(e_diff, 4), round(f_diff, 4),
+                ))
             print("Instancing is done")
         else:
             print('cached Instancing')
